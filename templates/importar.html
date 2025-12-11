@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <h2 class="mb-4">Importación de Datos</h2>
+
+        {% if msg %}
+        <div class="alert alert-{{ msg_type }} alert-dismissible fade show" role="alert">
+            {{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+
+        <div class="row">
+            <!-- Importar Clientes -->
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">1. Cargar Pedidos (Clientes)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small">Sube el archivo <code>clientes.csv</code>. Se validará duplicados
+                            por Orden+Cuenta+Campaña.</p>
+
+                        <form method="POST" enctype="multipart/form-data">
+                            <input type="hidden" name="tipo" value="clientes">
+
+                            <div class="mb-3">
+                                <label class="form-label">Campaña</label>
+                                <select name="campana" class="form-select" required>
+                                    <option value="" selected disabled>Seleccionar...</option>
+                                    {% for i in range(1, 19) %}
+                                    <option value="2025-{{ '%02d' % i }}">Campaña {{ i }} (2025)</option>
+                                    {% endfor %}
+                                    <option value="OTRA">Otra / Manual</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Archivo CSV</label>
+                                <input type="file" name="archivo" class="form-control" accept=".csv" required>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100">Importar Clientes</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Importar Pagos MP -->
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="card-title mb-0">2. Cargar Pagos (Mercado Pago)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small">Sube el extracto de cuenta (CSV). Se ignorarán transacciones ya
+                            importadas.</p>
+
+                        <form method="POST" enctype="multipart/form-data">
+                            <input type="hidden" name="tipo" value="pagos">
+
+                            <div class="mb-3">
+                                <label class="form-label">Archivo CSV</label>
+                                <input type="file" name="archivo" class="form-control" accept=".csv" required>
+                            </div>
+
+                            <div class="mt-5"> <!-- Spacer to align buttons roughly if needed -->
+                                <button type="submit" class="btn btn-success w-100">Importar Pagos</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,190 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">Conciliación de Pagos Pendientes</h2>
+
+        <!-- Filtros -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="GET" class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">Desde</label>
+                        <input type="date" name="fecha_min" class="form-control"
+                            value="{{ args.get('fecha_min', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Hasta</label>
+                        <input type="date" name="fecha_max" class="form-control"
+                            value="{{ args.get('fecha_max', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Pagador</label>
+                        <input type="text" name="pagador" class="form-control" placeholder="Nombre..."
+                            value="{{ args.get('pagador', '') }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Orden</label>
+                        <select name="orden" class="form-select">
+                            <option value="DESC" {% if args.get('orden')=='DESC' %}selected{% endif %}>Más Recientes
+                            </option>
+                            <option value="ASC" {% if args.get('orden')=='ASC' %}selected{% endif %}>Más Antiguos
+                            </option>
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <button type="submit" class="btn btn-secondary w-100">Filtrar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Pagador (MP)</th>
+                        <th>Monto (MP)</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pago in pagos %}
+                    <tr id="row-{{ pago.id_pago_mp }}">
+                        <td>{{ pago.fecha_cobro.strftime('%d/%m/%Y') }}</td>
+                        <td>{{ pago.nombre_pagador }}</td>
+                        <td class="fw-bold">${{ "{:,.2f}".format(pago.monto_neto) }}</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm btn-conciliar" data-id="{{ pago.id_pago_mp }}"
+                                data-monto="{{ pago.monto_neto }}" data-pagador="{{ pago.nombre_pagador }}">
+                                Vincular
+                            </button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-4">No hay pagos pendientes por conciliar.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Conciliacion -->
+<div class="modal fade" id="modalConciliar" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Vincular Pago</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info d-flex justify-content-between">
+                    <span>Pagador: <strong id="modal-pagador"></strong></span>
+                    <span>Monto: <strong id="modal-monto"></strong></span>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Buscar Clienta (Nombre o Cuenta)</label>
+                    <input type="text" class="form-control" id="input-buscar" placeholder="Escribe para buscar...">
+                </div>
+
+                <div class="list-group" id="lista-resultados">
+                    <!-- Resultados AJAX -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentPagoId = null;
+    let currentMonto = 0;
+
+    document.querySelectorAll('.btn-conciliar').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentPagoId = btn.dataset.id;
+            currentMonto = parseFloat(btn.dataset.monto);
+
+            document.getElementById('modal-pagador').textContent = btn.dataset.pagador;
+            document.getElementById('modal-monto').textContent = '$' + currentMonto.toFixed(2);
+            document.getElementById('lista-resultados').innerHTML = '';
+            document.getElementById('input-buscar').value = '';
+
+            new bootstrap.Modal(document.getElementById('modalConciliar')).show();
+
+            // Auto-search if pagador name is useful? Maybe later.
+            document.getElementById('input-buscar').focus();
+        });
+    });
+
+    document.getElementById('input-buscar').addEventListener('input', (e) => {
+        const q = e.target.value;
+        if (q.length < 3) return;
+
+        fetch(`/api/buscar_cliente?q=${encodeURIComponent(q)}`)
+            .then(r => r.json())
+            .then(data => {
+                const lista = document.getElementById('lista-resultados');
+                lista.innerHTML = '';
+
+                if (data.length === 0) {
+                    lista.innerHTML = '<div class="list-group-item text-muted">No se encontraron coincidencias</div>';
+                    return;
+                }
+
+                data.forEach(cliente => {
+                    const diff = Math.abs(cliente.monto_pedido - currentMonto);
+                    const badgeClass = diff < 1.0 ? 'bg-success' : 'bg-warning text-dark';
+                    const diffText = diff < 1.0 ? 'Monto Exacto' : 'Diferencia: $' + diff.toFixed(2);
+
+                    const item = document.createElement('a');
+                    item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                    item.innerHTML = `
+                    <div>
+                        <strong>${cliente.nombre_clienta}</strong> <small class="text-muted">(Cuenta: ${cliente.cuenta || 'N/A'})</small><br>
+                        <small>Orden: ${cliente.orden || '-'} | Reparto: ${cliente.reparto || '-'}</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="fw-bold">$${parseFloat(cliente.monto_pedido).toFixed(2)}</div>
+                        <span class="badge ${badgeClass}">${diffText}</span>
+                        <button class="btn btn-sm btn-outline-primary ms-2 btn-confirmar">Seleccionar</button>
+                    </div>
+                `;
+
+                    item.querySelector('.btn-confirmar').addEventListener('click', (ev) => {
+                        ev.stopPropagation(); // Evitar doble evento si clickea el row
+                        conciliar(currentPagoId, cliente.cliente_id);
+                    });
+
+                    lista.appendChild(item);
+                });
+            });
+    });
+
+    function conciliar(pagoId, clienteId) {
+        if (!confirm('¿Confirmar vinculación? Esta acción no se puede deshacer fácilmente.')) return;
+
+        fetch('/api/conciliar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pago_id: pagoId, cliente_id: clienteId })
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    // Cerrar modal y quitar fila
+                    bootstrap.Modal.getInstance(document.getElementById('modalConciliar')).hide();
+                    document.getElementById('row-' + pagoId).remove();
+                    alert('¡Vinculado correctamente!');
+                } else {
+                    alert('Error: ' + res.error);
+                }
+            });
+    }
+</script>
+{% endblock %}
